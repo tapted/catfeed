@@ -22,3 +22,4 @@ handlers:
 
 - url: .*  # This regex directs all routes to main.app
   script: main.app
+  login: required
