@@ -21,7 +21,7 @@
 
   document.getElementById('butRefresh').addEventListener('click', function() {
     // Refresh all of the forecasts
-    app.updateForecasts();
+    app.fetchData();
   });
 
   document.getElementById('butAdd').addEventListener('click', function() {
@@ -30,8 +30,22 @@
   });
 
   document.getElementById('butAddPet').addEventListener('click', function() {
-    app.savePet();
+    var pet = {
+      key: 'pending',
+      name: document.getElementById('petName').value,
+      created: Date(),
+      am: '07:00:00',
+      pm: '19:30:00',
+      current: {
+        date: '0001-01-01T00:00:00',
+        feeder: 'First!',
+      },
+    };
+    app.updatePetCard(pet);
     app.toggleAddDialog(false);
+    console.log(app.selectedPets);
+    app.selectedPets.push(pet);
+    app.savePets(true);
   });
 
   document.getElementById('butAddCancel').addEventListener('click', function() {
@@ -57,14 +71,16 @@
 
   // Updates a pet card from the database.
   app.updatePetCard = function(data) {
-    console.log(data);
     var dataLastUpdated = new Date(data.created);
     var current = data.current;
     var card = app.visibleCards[data.key];
     if (!card) {
+      card = app.visibleCards['pending'];
+    }
+    if (!card) {
       card = app.cardTemplate.cloneNode(true);
       card.classList.remove('cardTemplate');
-      card.querySelector('.petname').textContent = data.label;
+      card.querySelector('.petname').textContent = data.name;
       card.removeAttribute('hidden');
       app.container.appendChild(card);
       app.visibleCards[data.key] = card;
@@ -84,10 +100,10 @@
     }
     cardLastUpdatedElem.textContent = data.created;
 
-    card.querySelector('.description').textContent = current.text;
     card.querySelector('.date').textContent = current.date;
-    card.querySelector('.current .icon').classList.add(app.getIconClass(current.code));
-    card.querySelector('.current .feed').textContent = 'Feedstate';
+    card.querySelector('.feeder').textContent = current.feeder;
+    card.querySelector('.visual .icon').classList.add(app.getIconClass(current.code));
+    card.querySelector('.visual .feed').textContent = 'Feedstate';
     var today = new Date();
     today = today.getDay();
     if (app.isLoading) {
@@ -104,8 +120,16 @@
    *
    ****************************************************************************/
 
+  app.requestDone = function(request) {
+    document.querySelector('.footer .stamp').textContent = Date(request.stamp);
+  };
+
+  app.onError = function(request) {
+    console.log(request);
+    document.querySelector('.footer .error').textContent = 'Error';
+  };
+
   app.setUser = function(nick, url) {
-    console.log("setuser: ", nick, url);
     var card = document.querySelector('.user');
     card.querySelector('.url').action = url;
     if (nick) {
@@ -119,155 +143,58 @@
     }
   };
 
-  app.fetchUser = function() {
-    var url = '/user';
+  app.fetchData = function() {
     var request = new XMLHttpRequest();
     request.onreadystatechange = function() {
       if (request.readyState === XMLHttpRequest.DONE) {
         if (request.status === 200) {
           var response = JSON.parse(request.response);
           app.setUser(response.nick, response.url);
+          var eaterlist = []
+          for (var e in response.eaters) {
+            eaterlist.push(response.eaters[e]);
+            app.updatePetCard(response.eaters[e]);
+          }
+          app.selectedPets = eaterlist;
+          app.savePets(false);
+          app.requestDone(response);
         }
       } else {
         app.setUser('fail - not connected?', '');
       }
     };
-    request.open('GET', url);
+    request.open('GET', '/get');
     request.send();
   };
 
-  /*
-   * Gets a forecast for a specific city and updates the card with the data.
-   * getForecast() first checks if the weather data is in the cache. If so,
-   * then it gets that data and populates the card with the cached data.
-   * Then, getForecast() goes to the network for fresh data. If the network
-   * request goes through, then the card gets updated a second time with the
-   * freshest data.
-   */
-  app.getForecast = function(key, label) {
-    var statement = 'select * from weather.forecast where woeid=' + key;
-    var url = 'https://query.yahooapis.com/v1/public/yql?format=json&q=' +
-        statement;
-    // TODO add cache logic here
-    if ('caches' in window) {
-      /*
-       * Check if the service worker has already cached this city's weather
-       * data. If the service worker has the data, then display the cached
-       * data while the app fetches the latest data.
-       */
-      caches.match(url).then(function(response) {
-        if (response) {
-          response.json().then(function updateFromCache(json) {
-            var results = json.query.results;
-            results.key = key;
-            results.label = label;
-            results.created = json.query.created;
-            app.updatePetCard(results);
-          });
-        }
-      });
-    }
-    // Fetch the latest data.
+  app.savePets = function(commit) {
+    var petString = JSON.stringify(app.selectedPets);
+    localStorage.selectedPets = petString;
+    if (!commit)
+      return;
+
     var request = new XMLHttpRequest();
     request.onreadystatechange = function() {
       if (request.readyState === XMLHttpRequest.DONE) {
         if (request.status === 200) {
           var response = JSON.parse(request.response);
-          var results = response.query.results;
-          results.key = key;
-          results.label = label;
-          results.created = response.query.created;
-          app.updatePetCard(results);
+          app.requestDone(response);
+          app.fetchData();
+        } else {
+          app.onError(request);
         }
-      } else {
-        // Return the initial weather forecast since no data is available.
-        app.updatePetCard(initialPet);
       }
     };
-    request.open('GET', url);
-    request.send();
-  };
-
-  // Iterate all of the cards and attempt to get the latest forecast data
-  app.updateForecasts = function() {
-    var keys = Object.keys(app.visibleCards);
-    keys.forEach(function(key) {
-      //app.getForecast(key);
-    });
-  };
-
-  // TODO add savePet function here
-  // Save list of cities to localStorage.
-  app.savePet = function() {
-    var selectedPets = JSON.stringify(app.selectedPets);
-    localStorage.selectedPets = selectedPets;
+    request.open('POST', '/savepets');
+    request.setRequestHeader('Content-type', 'application/json');
+    request.send(petString);
   };
 
   app.getIconClass = function(weatherCode) {
-    // Weather codes: https://developer.yahoo.com/weather/documentation.html#codes
-    weatherCode = parseInt(weatherCode);
-    switch (weatherCode) {
-      case 25: // cold
-      case 32: // sunny
-      case 33: // fair (night)
-      case 34: // fair (day)
-      case 36: // hot
-      case 3200: // not available
-        return 'clear-day';
-      case 0: // tornado
-      case 1: // tropical storm
-      case 2: // hurricane
-      case 6: // mixed rain and sleet
-      case 8: // freezing drizzle
-      case 9: // drizzle
-      case 10: // freezing rain
-      case 11: // showers
-      case 12: // showers
-      case 17: // hail
-      case 35: // mixed rain and hail
-      case 40: // scattered showers
-        return 'rain';
-      case 3: // severe thunderstorms
-      case 4: // thunderstorms
-      case 37: // isolated thunderstorms
-      case 38: // scattered thunderstorms
-      case 39: // scattered thunderstorms (not a typo)
-      case 45: // thundershowers
-      case 47: // isolated thundershowers
-        return 'thunderstorms';
-      case 5: // mixed rain and snow
-      case 7: // mixed snow and sleet
-      case 13: // snow flurries
-      case 14: // light snow showers
-      case 16: // snow
-      case 18: // sleet
-      case 41: // heavy snow
-      case 42: // scattered snow showers
-      case 43: // heavy snow
-      case 46: // snow showers
-        return 'snow';
-      case 15: // blowing snow
-      case 19: // dust
-      case 20: // foggy
-      case 21: // haze
-      case 22: // smoky
-        return 'fog';
-      case 24: // windy
-      case 23: // blustery
-        return 'windy';
-      case 26: // cloudy
-      case 27: // mostly cloudy (night)
-      case 28: // mostly cloudy (day)
-      case 31: // clear (night)
-        return 'cloudy';
-      case 29: // partly cloudy (night)
-      case 30: // partly cloudy (day)
-      case 44: // partly cloudy
-        return 'partly-cloudy-day';
-    }
+    return 'windy';
   };
 
-  app.fetchUser();
+  app.fetchData();
 
   /*
    * Fake weather data that is presented when the user first uses the app,
@@ -276,13 +203,13 @@
    */
   var initialPet = {
     key: '2459115',
-    label: 'Angus',
+    name: 'Angus',
     created: '2016-07-22T01:00:00Z',
+    am: '07:00:00',
+    pm: '19:30:00',
     current: {
-      text: "Windy",
-      date: "Thu, 21 Jul 2016 09:00 PM EDT",
-      temp: 56,
-      code: 24
+      date: '2016-07-22T01:00:00Z',
+      feeder: 'Fred',
     },
   };
   // TODO uncomment line below to test app with fake data

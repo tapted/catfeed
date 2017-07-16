@@ -7,3 +7,5 @@ gcloud init
 (cd .. && git clone https://github.com/GoogleCloudPlatform/python-docs-samples.git)
 sudo easy_install pip
 pip install -t lib -r requirements.txt
+
+ /c/Python27/Scripts/pip install --target lib --upgrade click==5.1

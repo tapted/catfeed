@@ -20,6 +20,11 @@ handlers:
   upload: .+\.(gif|png|jpg|css|svg|js)$
   application_readable: true
 
+- url: /
+  static_files: 'index.html'
+  upload: 'index.html'
+  login: required
+
 - url: .*  # This regex directs all routes to main.app
   script: main.app
   login: required
