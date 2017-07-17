@@ -1,0 +1,7 @@
+indexes:
+
+- kind: Fed
+  ancestor: yes
+  properties:
+  - name: when
+    direction: desc

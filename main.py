@@ -42,8 +42,8 @@ class Fed(ndb.Model):
   when = ndb.DateTimeProperty(auto_now_add=True)
   who = ndb.StringProperty()
   @classmethod
-  def query_eater(cls, feeder):
-    return cls.query(ancestor=feeder.key).order(Fed.when).fetch(1)
+  def query_eater(cls, eater):
+    return cls.query(ancestor=eater.key).order(-Fed.when).fetch(1)
 
 app = flask.Flask(__name__)
 app.debug = True
@@ -67,7 +67,9 @@ def get():
       e = Eater(parent=feeder.key)
       eater_key = e.put()
       eaters.append(Eater())
+      eaters = Eater.query_feeder(feeder)
     for e in eaters:
+      print e
       d = {'key': e.key.urlsafe(), 'name': e.name, 'am': e.am, 'pm':e.pm}
       lastfed = Fed.query_eater(e)
       if len(lastfed) == 0:
