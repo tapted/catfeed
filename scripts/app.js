@@ -29,6 +29,10 @@
     app.toggleAddDialog(true);
   });
 
+  document.getElementById('butSave').addEventListener('click', function() {
+    app.savePets(true);
+  });
+
   document.getElementById('butAddPet').addEventListener('click', function() {
     var pet = {
       key: 'pending',
@@ -80,7 +84,6 @@
     if (!card) {
       card = app.cardTemplate.cloneNode(true);
       card.classList.remove('cardTemplate');
-      card.querySelector('.petname').textContent = data.name;
       card.removeAttribute('hidden');
       app.container.appendChild(card);
       app.visibleCards[data.key] = card;
@@ -100,10 +103,22 @@
     }
     cardLastUpdatedElem.textContent = data.created;
 
+    card.querySelector('.petname').textContent = data.name;
     card.querySelector('.date').textContent = current.date;
     card.querySelector('.feeder').textContent = current.feeder;
     card.querySelector('.visual .icon').classList.add(app.getIconClass(current.code));
-    card.querySelector('.visual .feed').textContent = 'Feedstate';
+
+    // Replace the event listener: need to bind new data to it.
+    var old_feed = card.querySelector('.visual .feed');
+    var new_feed = old_feed.cloneNode(true);
+    new_feed.disabled = false;
+    new_feed.textContent = 'Feed ' + data.name;
+    new_feed.addEventListener('click', function() {
+      new_feed.disabled = true;
+      app.feedPet(data, new_feed);
+    });
+    old_feed.parentNode.replaceChild(new_feed, old_feed);
+
     var today = new Date();
     today = today.getDay();
     if (app.isLoading) {
@@ -121,7 +136,19 @@
    ****************************************************************************/
 
   app.requestDone = function(request) {
+    console.log(request);
+    app.spinner.setAttribute('hidden', true);
     document.querySelector('.footer .stamp').textContent = Date(request.stamp);
+    var message = '';
+    if (request.message)
+      message = request.message;
+    if (request.error)
+      message = request.error;
+    document.querySelector('.footer .message').textContent = message;
+
+    if (request.error) {
+      app.onError(request);
+    }
   };
 
   app.onError = function(request) {
@@ -151,6 +178,8 @@
           var response = JSON.parse(request.response);
           app.setUser(response.nick, response.url);
           var eaterlist = []
+          if (response.eaters.length == 0)
+            response.message = 'All pets deleted';          
           for (var e in response.eaters) {
             eaterlist.push(response.eaters[e]);
             app.updatePetCard(response.eaters[e]);
@@ -158,16 +187,51 @@
           app.selectedPets = eaterlist;
           app.savePets(false);
           app.requestDone(response);
+        } else {
+          app.setUser('fail - not connected?', '');
         }
       } else {
-        app.setUser('fail - not connected?', '');
+        app.setUser('Working..', '');
       }
     };
     request.open('GET', '/get');
     request.send();
   };
 
+  app.feedPet = function(pet_data, button) {
+    pet_data.current.date = new Date();
+    pet_data.current.feeder = 'Me!';
+    if (pet_data.key == 'pending') {
+      app.updatePetCard(pet_data);
+      app.savePets(true);
+      console.log('Pet has a pending key..');
+      return;
+    }
+
+    localStorage.selectedPets = JSON.stringify(app.selectedPets);
+
+    var request = new XMLHttpRequest();
+    request.onreadystatechange = function() {
+      if (request.readyState === XMLHttpRequest.DONE) {
+        button.disabled = false;
+        if (request.status === 200) {
+          var response = JSON.parse(request.response);
+          pet_data.current.feeder = response.feeder;
+          app.requestDone(response);
+        } else {
+          app.onError(request);
+        }
+        app.updatePetCard(pet_data);
+      }
+    };
+    request.open('POST', '/feed');
+    request.setRequestHeader('Content-type', 'application/json');
+    request.send(JSON.stringify({'pet_key' : pet_data.key}));
+  };
+
   app.savePets = function(commit) {
+    console.log('Saved commit = ' + commit);
+    console.log(app.selectedPets);
     var petString = JSON.stringify(app.selectedPets);
     localStorage.selectedPets = petString;
     if (!commit)
@@ -177,9 +241,19 @@
     request.onreadystatechange = function() {
       if (request.readyState === XMLHttpRequest.DONE) {
         if (request.status === 200) {
-          var response = JSON.parse(request.response);
+          var response = JSON.parse(request.response);          
           app.requestDone(response);
-          app.fetchData();
+          for (var i in app.selectedPets) {
+            var oKey = app.selectedPets[i].key;
+            var nKey = response.keys[i];
+            if (oKey == 'pending') {
+              app.selectedPets[i].key = nKey;
+              app.updatePetCard(app.selectedPets[i]);
+            } else if (oKey != nKey) {
+              console.log('Key Sync error: ' + oKey + ' != ' + nKey);
+            }
+          }
+          localStorage.selectedPets = JSON.stringify(app.selectedPets);
         } else {
           app.onError(request);
         }
@@ -194,15 +268,13 @@
     return 'windy';
   };
 
-  app.fetchData();
-
   /*
    * Fake weather data that is presented when the user first uses the app,
    * or when the user has not saved any cities. See startup code for more
    * discussion.
    */
   var initialPet = {
-    key: '2459115',
+    key: 'pending',
     name: 'Angus',
     created: '2016-07-22T01:00:00Z',
     am: '07:00:00',
@@ -212,39 +284,23 @@
       feeder: 'Fred',
     },
   };
-  // TODO uncomment line below to test app with fake data
-  app.updatePetCard(initialPet);
 
-  /************************************************************************
-   *
-   * Code required to start the app
-   *
-   * NOTE: To simplify this codelab, we've used localStorage.
-   *   localStorage is a synchronous API and has serious performance
-   *   implications. It should not be used in production applications!
-   *   Instead, check out IDB (https://www.npmjs.com/package/idb) or
-   *   SimpleDB (https://gist.github.com/inexorabletash/c8069c042b734519680c)
-   ************************************************************************/
-
-  // TODO add startup code here
   app.selectedPets = localStorage.selectedPets;
   if (app.selectedPets) {
     app.selectedPets = JSON.parse(app.selectedPets);
-    app.selectedPets.forEach(function(city) {
-      //app.getForecast(city.key, city.label);
-    });
+    for (var i in app.selectedPets)
+      app.updatePetCard(app.selectedPets[i]);
   } else {
     /* The user is using the app for the first time, or the user has not
      * saved any cities, so show the user some fake data. A real app in this
      * scenario could guess the user's petname via IP lookup and then inject
      * that data into the page.
      */
+    app.selectedPets = [ initialPet ];
     app.updatePetCard(initialPet);
-    app.selectedPets = [
-      {key: initialPet.key, label: initialPet.label}
-    ];
-    app.savePet();
   }
+
+  app.fetchData();
 
   // TODO add service worker code here
   if ('serviceWorker' in navigator) {
