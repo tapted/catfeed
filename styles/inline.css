@@ -112,6 +112,10 @@ body {
     background: url(/images/ic_refresh_white_24px.svg) center center no-repeat; }
   .header #butAdd {
     background: url(/images/ic_add_white_24px.svg) center center no-repeat; }
+  .header #butReload {
+    background: url(/images/cloud-reload-2.svg) center center no-repeat; }
+  .header #butSave {
+    background: url(/images/save.svg) center center no-repeat; }
 
 .header__title {
   font-weight: 400;

@@ -1,4 +1,4 @@
-var dataCacheName = 'catfeedData-v1';
+var dataCacheName = 'catfeedData-v1.01';
 var cacheName = 'catfeedPWA-step-1';
 var filesToCache = [
   '/',
@@ -6,6 +6,9 @@ var filesToCache = [
   '/styles/inline.css',
   '/images/ic_add_white_24px.svg',
   '/images/ic_refresh_white_24px.svg',
+  '/images/editing.svg',
+  '/images/save.svg',
+  '/images/cloud-reload-2.svg',
 ];
 
 self.addEventListener('install', function(e) {

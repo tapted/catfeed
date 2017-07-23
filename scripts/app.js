@@ -19,8 +19,11 @@
    *
    ****************************************************************************/
 
+  document.getElementById('butReload').addEventListener('click', function() {
+    location.reload();
+  });
+
   document.getElementById('butRefresh').addEventListener('click', function() {
-    // Refresh all of the forecasts
     app.fetchData();
   });
 
@@ -104,6 +107,7 @@
     cardLastUpdatedElem.textContent = data.created;
 
     card.querySelector('.petname').textContent = data.name;
+    card.querySelector('.phase').textContent = app.phase;
     card.querySelector('.date').textContent = current.date;
     card.querySelector('.feeder').textContent = current.feeder;
     card.querySelector('.visual .icon').classList.add(app.getIconClass(current.code));
@@ -268,11 +272,7 @@
     return 'windy';
   };
 
-  /*
-   * Fake weather data that is presented when the user first uses the app,
-   * or when the user has not saved any cities. See startup code for more
-   * discussion.
-   */
+  /* Sample data */
   var initialPet = {
     key: 'pending',
     name: 'Angus',
@@ -284,22 +284,22 @@
       feeder: 'Fred',
     },
   };
+  app.phase = 'Local';
 
   app.selectedPets = localStorage.selectedPets;
   if (app.selectedPets) {
     app.selectedPets = JSON.parse(app.selectedPets);
-    for (var i in app.selectedPets)
+    for (var i in app.selectedPets) {
+      app.selectedPets[i].fresh = false;
       app.updatePetCard(app.selectedPets[i]);
+    }
   } else {
-    /* The user is using the app for the first time, or the user has not
-     * saved any cities, so show the user some fake data. A real app in this
-     * scenario could guess the user's petname via IP lookup and then inject
-     * that data into the page.
-     */
+    /* The user is using the app for the first time. */
     app.selectedPets = [ initialPet ];
     app.updatePetCard(initialPet);
   }
 
+  app.phase = 'Server';
   app.fetchData();
 
   // TODO add service worker code here
